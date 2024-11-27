@@ -6,17 +6,44 @@
 class Out_Of_Stock_Display_Manager_For_Woocommerce_Exclusions {
 
     /**
+     * Retrieves the WooCommerce exclusion options.
+     *
+     * @return array The stored options for out-of-stock exclusions.
+     */
+    private function get_options() {
+        return get_option('woocommerce_out_of_stock_exclusions', []);
+    }
+
+    /**
+     * Retrieves a specific option value from the exclusions settings.
+     *
+     * @param string $key The key to retrieve.
+     * @param mixed $default The default value if the key doesn't exist.
+     * @return mixed The option value.
+     */
+    private function get_option_value($key, $default = '') {
+        $options = $this->get_options();
+        return isset($options[$key]) ? $options[$key] : $default;
+    }
+
+    /**
+     * Converts a comma-separated string to an array, trimming extra spaces.
+     *
+     * @param string $value The comma-separated string.
+     * @return array The resulting array.
+     */
+    private function parse_comma_separated_value($value) {
+        return !empty($value) ? array_map('trim', explode(',', $value)) : [];
+    }
+
+    /**
      * Retrieves the list of product IDs to be excluded.
      *
      * @return array List of excluded product IDs.
      */
     public function get_excluded_product_ids() {
-        // Get the option from the WooCommerce settings
-        $options = get_option('woocommerce_out_of_stock_exclusions', []);
-        $excluded_products = isset($options['excluded_products']) ? $options['excluded_products'] : '';
-        
-        // Return the excluded product IDs as an array, trimming any extra spaces
-        return !empty($excluded_products) ? array_map('trim', explode(',', $excluded_products)) : [];
+        $excluded_products = $this->get_option_value('excluded_products', '');
+        return $this->parse_comma_separated_value($excluded_products);
     }
 
     /**
@@ -25,12 +52,19 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Exclusions {
      * @return array List of hidden category IDs.
      */
     public function get_hidden_category_ids() {
-        // Get the option from the WooCommerce settings
-        $options = get_option('woocommerce_out_of_stock_exclusions', []);
-        $hidden_categories = isset($options['hidden_categories']) ? $options['hidden_categories'] : '';
-        
-        // Return the hidden category IDs as an array, trimming any extra spaces
-        return !empty($hidden_categories) ? array_map('trim', explode(',', $hidden_categories)) : [];
+        $hidden_categories = $this->get_option_value('hidden_categories', '');
+        return $this->parse_comma_separated_value($hidden_categories);
+    }
+
+    /**
+     * Checks if out-of-stock products are excluded from a specific page type.
+     *
+     * @param string $page The page type (e.g., 'shop', 'category', 'search').
+     * @return string 'yes' if excluded, empty string otherwise.
+     */
+    public function is_excluded_from($page) {
+        $excluded_pages = $this->get_option_value('excluded_pages', []);
+        return isset($excluded_pages[$page]) ? $excluded_pages[$page] : '';
     }
 
     /**
@@ -39,8 +73,7 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Exclusions {
      * @return string 'yes' if excluded, empty string otherwise.
      */
     public function is_excluded_from_shop() {
-        $options = get_option('woocommerce_out_of_stock_exclusions', []);
-        return isset($options['excluded_pages']['shop']) ? $options['excluded_pages']['shop'] : "";
+        return $this->is_excluded_from('shop');
     }
 
     /**
@@ -49,8 +82,7 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Exclusions {
      * @return string 'yes' if excluded, empty string otherwise.
      */
     public function is_excluded_from_category() {
-        $options = get_option('woocommerce_out_of_stock_exclusions', []);
-        return isset($options['excluded_pages']['category']) ? $options['excluded_pages']['category'] : "";
+        return $this->is_excluded_from('category');
     }
 
     /**
@@ -59,7 +91,6 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Exclusions {
      * @return string 'yes' if excluded, empty string otherwise.
      */
     public function is_excluded_from_search() {
-        $options = get_option('woocommerce_out_of_stock_exclusions', []);
-        return isset($options['excluded_pages']['search']) ? $options['excluded_pages']['search'] : "";
+        return $this->is_excluded_from('search');
     }
 }
