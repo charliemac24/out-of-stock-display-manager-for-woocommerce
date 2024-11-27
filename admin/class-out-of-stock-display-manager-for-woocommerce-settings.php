@@ -3,33 +3,26 @@
 /**
  * Out Of Stock Display Manager for WooCommerce Settings.
  *
- * Handles the settings page for customizing the display of out-of-stock products in WooCommerce,
- * including global display settings and granular exclusion rules for specific products and categories.
+ * Provides an interface for customizing the display of out-of-stock products,
+ * including global settings and exclusion rules.
  *
  * @package WooCommerce
  */
-class Out_Of_Stock_Display_Manager_For_Woocommerce_Settings {
+class OutOfStockDisplayManager {
 
     /**
-     * Option name for general settings.
-     *
-     * @var string
+     * Option names for settings.
      */
-    private $option_name = 'woocommerce_out_of_stock_settings';
+    private const OPTION_NAME = 'woocommerce_out_of_stock_settings';
+    private const EXCLUSION_OPTION_NAME = 'woocommerce_out_of_stock_exclusions';
 
     /**
-     * Option name for exclusion settings.
-     *
-     * @var string
-     */
-    private $exclusion_option_name = 'woocommerce_out_of_stock_exclusions';
-
-    /**
-     * Constructor. Hooks into WordPress admin menu and initialization actions.
+     * Constructor. Hooks into WordPress admin actions.
      */
     public function __construct() {
         add_action('admin_menu', [$this, 'add_settings_page']);
         add_action('admin_init', [$this, 'register_settings']);
+        add_action('admin_footer', [$this, 'add_dynamic_toggle_script']);
     }
 
     /**
@@ -44,96 +37,87 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Settings {
             __('Out of Stock Display', 'woocommerce'),
             'manage_woocommerce',
             'woocommerce-out-of-stock-display',
-            [$this, 'settings_page']
+            [$this, 'render_settings_page']
         );
     }
 
     /**
-     * Registers the settings and fields for global display settings and granular exclusion rules.
+     * Registers settings and fields for the settings page.
      *
      * @return void
      */
     public function register_settings() {
+        // Global settings
+        register_setting(self::OPTION_NAME, self::OPTION_NAME);
 
-        // Register the global settings option
-        register_setting($this->option_name, $this->option_name);
-
-        // Section: Global Settings
         add_settings_section(
             'global_settings',
             __('Global Display Settings', 'woocommerce'),
             null,
-            $this->option_name
+            self::OPTION_NAME
         );
 
         add_settings_field(
             'out_of_stock_display',
             __('Out of Stock Product Display', 'woocommerce'),
-            [$this, 'out_of_stock_display_field'],
-            $this->option_name,
+            [$this, 'render_out_of_stock_display_field'],
+            self::OPTION_NAME,
             'global_settings'
         );
 
-        // Register the exclusion settings option
-        register_setting($this->exclusion_option_name, $this->exclusion_option_name);
+        // Exclusion settings
+        register_setting(self::EXCLUSION_OPTION_NAME, self::EXCLUSION_OPTION_NAME);
 
-        // Section: Granular Rules (Only applicable when 'Hide' is selected)
         add_settings_section(
-            'granular_rules',
+            'exclusion_rules',
             __('Exclusion Rules', 'woocommerce'),
             null,
-            $this->exclusion_option_name
+            self::EXCLUSION_OPTION_NAME
         );
 
-        add_settings_field(
-            'excluded_products',
-            __('Exclude Specific Products', 'woocommerce'),
-            [$this, 'excluded_products_field'],
-            $this->exclusion_option_name,
-            'granular_rules'
-        );
+        $fields = [
+            'excluded_products' => __('Exclude Specific Products', 'woocommerce'),
+            'excluded_pages' => __('Exclude Products on Specific Pages', 'woocommerce'),
+            'hidden_categories' => __('Hide Products from Specific Categories', 'woocommerce')
+        ];
 
-        add_settings_field(
-            'excluded_pages',
-            __('Exclude Products on Specific Pages', 'woocommerce'),
-            [$this, 'excluded_pages_field'],
-            $this->exclusion_option_name,
-            'granular_rules'
-        );
-
-        add_settings_field(
-            'hidden_categories',
-            __('Hide Products from Specific Categories', 'woocommerce'),
-            [$this, 'hidden_categories_field'],
-            $this->exclusion_option_name,
-            'granular_rules'
-        );
+        foreach ($fields as $field_key => $field_label) {
+            add_settings_field(
+                $field_key,
+                $field_label,
+                [$this, "render_{$field_key}_field"],
+                self::EXCLUSION_OPTION_NAME,
+                'exclusion_rules'
+            );
+        }
     }
 
     /**
-     * Displays the settings page with the forms for general settings and exclusion rules.
+     * Renders the settings page.
      *
      * @return void
      */
-    public function settings_page() {
+    public function render_settings_page() {
+        $global_options = get_option(self::OPTION_NAME);
+        $display_option = $global_options['out_of_stock_display'] ?? 'hide';
         ?>
         <div class="wrap">
-            <h1><?php _e('Out of Stock Display Settings', 'woocommerce'); ?></h1>
-    
+            <h1><?php esc_html_e('Out of Stock Display Settings', 'woocommerce'); ?></h1>
+
             <!-- General Settings Form -->
             <form method="post" action="options.php">
                 <?php
-                settings_fields($this->option_name); // General settings fields
-                do_settings_sections($this->option_name); // General settings sections
+                settings_fields(self::OPTION_NAME);
+                do_settings_sections(self::OPTION_NAME);
                 submit_button(__('Save General Settings', 'woocommerce'));
                 ?>
             </form>
-    
+
             <!-- Exclusion Rules Form -->
-            <form method="post" action="options.php" class="exclusion-rules-wrapper-form">
+            <form method="post" action="options.php" class="exclusion-rules-form" style="display: none;">
                 <?php
-                settings_fields($this->exclusion_option_name); // Exclusion settings fields
-                do_settings_sections($this->exclusion_option_name); // Exclusion settings sections
+                settings_fields(self::EXCLUSION_OPTION_NAME);
+                do_settings_sections(self::EXCLUSION_OPTION_NAME);
                 submit_button(__('Save Exclusion Rules', 'woocommerce'));
                 ?>
             </form>
@@ -142,122 +126,99 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Settings {
     }
 
     /**
-     * Displays the field for selecting the out-of-stock product display option.
+     * Renders the out-of-stock product display field.
      *
      * @return void
      */
-    public function out_of_stock_display_field() {
-        $options = get_option($this->option_name);
-        $display_option = isset($options['out_of_stock_display']) ? $options['out_of_stock_display'] : 'hide';
+    public function render_out_of_stock_display_field() {
+        $options = get_option(self::OPTION_NAME);
+        $value = $options['out_of_stock_display'] ?? 'hide';
         ?>
-        <select name="<?php echo $this->option_name; ?>[out_of_stock_display]">
-            <option value="hide" <?php selected($display_option, 'hide'); ?>>
-                <?php _e('Hide', 'woocommerce'); ?>
-            </option>
-            <option value="label" <?php selected($display_option, 'label'); ?>>
-                <?php _e('Show with Label', 'woocommerce'); ?>
-            </option>
-            <option value="backorder" <?php selected($display_option, 'backorder'); ?>>
-                <?php _e('Allow Backorders', 'woocommerce'); ?>
-            </option>
+        <select name="<?php echo esc_attr(self::OPTION_NAME); ?>[out_of_stock_display]" id="out-of-stock-display">
+            <?php foreach (['hide', 'label', 'backorder'] as $option): ?>
+                <option value="<?php echo esc_attr($option); ?>" <?php selected($value, $option); ?>>
+                    <?php echo esc_html(ucfirst($option)); ?>
+                </option>
+            <?php endforeach; ?>
         </select>
-        <p class="description"><?php _e('Choose how to display out-of-stock products.', 'woocommerce'); ?></p>
+        <p class="description"><?php esc_html_e('Choose how to display out-of-stock products.', 'woocommerce'); ?></p>
         <?php
     }
 
     /**
-     * Displays the field for excluding specific products by IDs.
+     * Renders the excluded products field.
      *
      * @return void
      */
-    public function excluded_products_field() {
-        $options = get_option($this->exclusion_option_name);
-        $excluded_products = isset($options['excluded_products']) ? $options['excluded_products'] : '';
+    public function render_excluded_products_field() {
+        $options = get_option(self::EXCLUSION_OPTION_NAME);
+        $value = $options['excluded_products'] ?? '';
         ?>
-        <input type="text" name="<?php echo $this->exclusion_option_name; ?>[excluded_products]" 
-            value="<?php echo esc_attr($excluded_products); ?>" 
-            placeholder="<?php _e('Enter product IDs, comma-separated', 'woocommerce'); ?>" 
-            class="regular-text">
-        <p class="description"><?php _e('Exclude specific products from being hidden. Applies only if "Hide" is selected above.', 'woocommerce'); ?></p>
+        <input type="text" name="<?php echo esc_attr(self::EXCLUSION_OPTION_NAME); ?>[excluded_products]" 
+               value="<?php echo esc_attr($value); ?>" 
+               class="regular-text"
+               placeholder="<?php esc_attr_e('Enter product IDs, comma-separated', 'woocommerce'); ?>">
         <?php
     }
 
     /**
-     * Displays the field for excluding products on specific pages (shop, search, category).
+     * Renders the excluded pages field.
      *
      * @return void
      */
-    public function excluded_pages_field() {
-        $options = get_option($this->exclusion_option_name);
-        $excluded_pages = isset($options['excluded_pages']) ? $options['excluded_pages'] : [];
+    public function render_excluded_pages_field() {
+        $options = get_option(self::EXCLUSION_OPTION_NAME);
+        $pages = ['shop', 'search', 'category'];
+        $selected = $options['excluded_pages'] ?? [];
+        foreach ($pages as $page) {
+            ?>
+            <label>
+                <input type="checkbox" name="<?php echo esc_attr(self::EXCLUSION_OPTION_NAME); ?>[excluded_pages][<?php echo esc_attr($page); ?>]" 
+                       value="1" <?php checked(isset($selected[$page]), true); ?>>
+                <?php echo esc_html(ucfirst($page)); ?>
+            </label><br>
+            <?php
+        }
+    }
+
+    /**
+     * Renders the hidden categories field.
+     *
+     * @return void
+     */
+    public function render_hidden_categories_field() {
+        $options = get_option(self::EXCLUSION_OPTION_NAME);
+        $value = $options['hidden_categories'] ?? '';
         ?>
-        <label>
-            <input type="checkbox" name="<?php echo $this->exclusion_option_name; ?>[excluded_pages][shop]" 
-                value="1" <?php checked(isset($excluded_pages['shop']), true); ?>>
-            <?php _e('Exclude products from the shop page', 'woocommerce'); ?>
-        </label><br>
-        <label>
-            <input type="checkbox" name="<?php echo $this->exclusion_option_name; ?>[excluded_pages][search]" 
-                value="1" <?php checked(isset($excluded_pages['search']), true); ?>>
-            <?php _e('Exclude products from the search results', 'woocommerce'); ?>
-        </label><br>
-        <label>
-            <input type="checkbox" name="<?php echo $this->exclusion_option_name; ?>[excluded_pages][category]" 
-                value="1" <?php checked(isset($excluded_pages['category']), true); ?>>
-            <?php _e('Exclude products from category pages', 'woocommerce'); ?>
-        </label>
+        <input type="text" name="<?php echo esc_attr(self::EXCLUSION_OPTION_NAME); ?>[hidden_categories]" 
+               value="<?php echo esc_attr($value); ?>" 
+               class="regular-text"
+               placeholder="<?php esc_attr_e('Enter category IDs, comma-separated', 'woocommerce'); ?>">
         <?php
     }
 
     /**
-     * Displays the field for hiding out-of-stock products from specific categories.
+     * Adds JavaScript to toggle exclusion rules visibility based on the dropdown.
      *
      * @return void
      */
-    public function hidden_categories_field() {
-        $options = get_option($this->exclusion_option_name);
-        $hidden_categories = isset($options['hidden_categories']) ? $options['hidden_categories'] : '';
+    public function add_dynamic_toggle_script() {
         ?>
-        <input type="text" name="<?php echo $this->exclusion_option_name; ?>[hidden_categories]" 
-            value="<?php echo esc_attr($hidden_categories); ?>" 
-            placeholder="<?php _e('Enter category IDs, comma-separated', 'woocommerce'); ?>" 
-            class="regular-text">
-        <p class="description"><?php _e('Hide all out-of-stock products from specific categories. Enter category IDs, separated by commas.', 'woocommerce'); ?></p>
-        <?php
-    }
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                const displayDropdown = document.getElementById('out-of-stock-display');
+                const exclusionForm = document.querySelector('.exclusion-rules-form');
 
-    /**
-     * Displays the field for customizing the out-of-stock label.
-     *
-     * @return void
-     */
-    public function custom_out_of_stock_label_field() {
-        $options = get_option($this->exclusion_option_name);
-        $custom_label = isset($options['custom_out_of_stock_label']) ? $options['custom_out_of_stock_label'] : __('Out of Stock', 'woocommerce');
-        ?>
-        <input type="text" name="<?php echo $this->exclusion_option_name; ?>[custom_out_of_stock_label]" 
-            value="<?php echo esc_attr($custom_label); ?>" 
-            class="regular-text">
-        <p class="description"><?php _e('Customize the label shown on out-of-stock products.', 'woocommerce'); ?></p>
-        <?php
-    }
+                const toggleVisibility = () => {
+                    exclusionForm.style.display = displayDropdown.value === 'hide' ? 'block' : 'none';
+                };
 
-    /**
-     * Displays the field for selecting the sorting priority of out-of-stock products.
-     *
-     * @return void
-     */
-    public function out_of_stock_sorting_field() {
-        $options = get_option($this->option_name);
-        $sorting = isset($options['out_of_stock_sorting']) ? $options['out_of_stock_sorting'] : 'last';
-        ?>
-        <select name="<?php echo $this->option_name; ?>[out_of_stock_sorting]">
-            <option value="last" <?php selected($sorting, 'last'); ?>><?php _e('Show Last', 'woocommerce'); ?></option>
-            <option value="first" <?php selected($sorting, 'first'); ?>><?php _e('Show First', 'woocommerce'); ?></option>
-        </select>
-        <p class="description"><?php _e('Set the sorting priority for out-of-stock products in product lists.', 'woocommerce'); ?></p>
+                displayDropdown.addEventListener('change', toggleVisibility);
+                toggleVisibility();
+            });
+        </script>
         <?php
     }
 }
 
-new Out_Of_Stock_Display_Manager_For_Woocommerce_Settings();
+new OutOfStockDisplayManager();
