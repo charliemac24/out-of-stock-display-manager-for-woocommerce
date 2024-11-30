@@ -15,17 +15,17 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Display {
     protected $_exclude_prod_ids;
 
     /**
-     * @var bool Determines if out-of-stock products should be excluded from the shop page.
+     * @var bool Determines if out-of-stock products should be hidden from the shop page.
      */
     protected $_is_hidden_from_shop;
 
     /**
-     * @var bool Determines if out-of-stock products should be excluded from category pages.
+     * @var bool Determines if out-of-stock products should be hidden from category pages.
      */
     protected $_is_hidden_from_category;
 
     /**
-     * @var bool Determines if out-of-stock products should be excluded from search results.
+     * @var bool Determines if out-of-stock products should be hidden from search results.
      */
     protected $_is_hidden_from_search;
 
