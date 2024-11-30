@@ -1,69 +1,38 @@
 <?php
 
 require_once plugin_dir_path(dirname(__FILE__)) . 'admin/class-out-of-stock-display-manager-for-woocommerce-exclusions.php';
+require_once plugin_dir_path(dirname(__FILE__)) . 'admin/class-out-of-stock-display-manager-for-woocommerce-backorder.php';
 
 /**
  * Class Out_Of_Stock_Display_Manager_For_Woocommerce_Display
  *
- * Manages the display of out-of-stock products in WooCommerce based on specific settings and exclusions.
+ * Manages the display of out-of-stock products in WooCommerce based on specific settings and exclusions. 
+ * This class handles customizations for product availability labels, filtering out-of-stock products 
+ * from product queries, and managing exclusions for different pages like the shop, product category, and search.
  */
 class Out_Of_Stock_Display_Manager_For_Woocommerce_Display {
 
     /**
-     * @var array List of excluded product IDs.
+     * @var Out_Of_Stock_Display_Manager_For_Woocommerce_Exclusions Manager for product exclusions settings.
      */
-    protected $_exclude_prod_ids;
+    protected $exclusions_manager;
 
     /**
-     * @var bool Determines if out-of-stock products should be hidden from the shop page.
+     * @var Out_Of_Stock_Display_Manager_For_Woocommerce_Backorder Manager for backorder settings.
      */
-    protected $_is_hidden_from_shop;
-
-    /**
-     * @var bool Determines if out-of-stock products should be hidden from category pages.
-     */
-    protected $_is_hidden_from_category;
-
-    /**
-     * @var bool Determines if out-of-stock products should be hidden from search results.
-     */
-    protected $_is_hidden_from_search;
-
-    /**
-     * @var array List of category IDs where out-of-stock products should be hidden.
-     */
-    protected $_hidden_category_ids;
+    protected $backorder_manager;
 
     /**
      * Class constructor.
      * 
-     * Initializes the exclusion settings for out-of-stock display management 
-     * and sets up necessary WooCommerce actions and filters.
-     * 
-     * Responsibilities:
-     * - Creates an instance of the `Out_Of_Stock_Display_Manager_For_Woocommerce_Exclusions` class 
-     *   to retrieve exclusion-related data (product IDs, categories, and visibility settings).
-     * - Hooks into WooCommerce to modify product queries and customize out-of-stock labels.
-     * 
-     * @property array $_exclude_prod_ids       Array of product IDs excluded from visibility.
-     * @property bool  $_is_hidden_from_shop    Whether out-of-stock products are hidden from the shop page.
-     * @property bool  $_is_hidden_from_category Whether out-of-stock products are hidden from category pages.
-     * @property bool  $_is_hidden_from_search  Whether out-of-stock products are hidden from search results.
-     * @property array $_hidden_category_ids    Array of category IDs excluded from visibility.
-     * 
-     * @return void
+     * Initializes the exclusion and backorder managers and hooks into WooCommerce actions and filters.
      */
     public function __construct() {
-
-        // Initialize the Exclusion class
-        $_exclusions = new Out_Of_Stock_Display_Manager_For_Woocommerce_Exclusions();
-
-        $this->_exclude_prod_ids = $_exclusions->get_excluded_product_ids();
-        $this->_is_hidden_from_shop = $_exclusions->is_hidden_from_shop();
-        $this->_is_hidden_from_category = $_exclusions->is_hidden_from_category();
-        $this->_is_hidden_from_search = $_exclusions->is_hidden_from_search();
-        $this->_hidden_category_ids = $_exclusions->get_hidden_category_ids();
-
+        // Initialize the Exclusion and Backorder managers
+        $this->exclusions_manager = new Out_Of_Stock_Display_Manager_For_Woocommerce_Exclusions();
+        $this->backorder_manager = new Out_Of_Stock_Display_Manager_For_Woocommerce_Backorder();
+        
+        // Add action and filter hooks
         add_action('woocommerce_product_query', [$this, 'filter_products_query']);
         add_filter('woocommerce_get_availability_text', [$this, 'customize_out_of_stock_label'], 10, 2);
     }
@@ -73,109 +42,118 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Display {
      *
      * @param string $availability_text The default availability text.
      * @param WC_Product $product The WooCommerce product object.
-     * @return string The customized availability text.
+     * 
+     * @return string Customized availability text, either the custom backorder message or a default out-of-stock label.
      */
     public function customize_out_of_stock_label($availability_text, $product) {
-        // Check if the product is out of stock
         if (!$product->is_in_stock()) {
-            // Retrieve the custom label from the WooCommerce settings
-            $options = get_option('woocommerce_out_of_stock_settings');
-            $custom_label = $options['out_of_stock_label'] ?? __('Out of Stock', 'woocommerce');
-            return $custom_label;
-        }
 
-        // Return the default label for in-stock products
+            // Retrieve the custom backorder message from the Backorder manager
+            $custom_message = $this->backorder_manager->get_custom_backorder_message();
+            
+            // If custom message exists, replace the default label
+            if ($custom_message) {
+                return $custom_message;
+            }
+
+            // Retrieve the default out-of-stock label from the plugin settings
+            $options = get_option('woocommerce_out_of_stock_settings');
+            return $options['out_of_stock_label'] ?? __('Out of Stock', 'woocommerce');
+        }
         return $availability_text;
     }
 
     /**
      * Filters WooCommerce product queries to exclude out-of-stock products.
-     *
-     * @param WC_Query $query The WooCommerce query object.
+     * 
+     * @param WP_Query $query The WP_Query object used to fetch products.
      */
     public function filter_products_query($query) {
-        // Ensure this logic applies only on the frontend and for WooCommerce queries
+        // Skip if not the main query or in the admin area
         if (is_admin() || !$query->is_main_query()) {
             return;
         }
 
         // Get out-of-stock display setting
-        $setting = $this->get_out_of_stock_display_setting();
-        $out_of_stock_display = $setting['out_of_stock_display'];
+        $out_of_stock_display = $this->get_out_of_stock_display_setting()['out_of_stock_display'] ?? 'show';
 
-        // Proceed only if the display setting is "hide"
+        // Skip if the display setting is not to hide out-of-stock products
         if ($out_of_stock_display !== 'hide') {
             return;
         }
 
-        // Prepare the meta query to exclude out-of-stock products
-        $meta_query = $query->get('meta_query') ?: [];
-        $meta_query = array_merge($meta_query, $this->exclude_out_of_stock());
+        // Prepare meta query to exclude out-of-stock products
+        $meta_query = $this->exclude_out_of_stock();
 
+        // Apply filters based on page type (shop, category, search)
+        $this->apply_page_filters($query, $meta_query);
+
+        // Always include excluded IDs mixed with in-stock products
+        if ($this->exclusions_manager->get_excluded_product_ids()) {
+            $meta_query[] = $this->show_exclude_product_ids();
+            $query->set('meta_query', $meta_query);
+            $query->set('post__in', array_merge($this->exclusions_manager->get_excluded_product_ids(), $this->get_instock_product_ids()));
+        }
+    }
+
+    /**
+     * Apply filters for specific page types (shop, category, search).
+     * 
+     * @param WP_Query $query The WP_Query object used to fetch products.
+     * @param array $meta_query The meta query to be applied for product filtering.
+     */
+    private function apply_page_filters($query, &$meta_query) {
         // Hide from shop page
-        if (is_shop() && $this->_is_hidden_from_shop) {
+        if (is_shop() && $this->exclusions_manager->is_hidden_from_shop()) {
             $query->set('meta_query', $meta_query);
         }
 
         // Hide from category page
-        if (is_product_category() && $this->_is_hidden_from_category) {
+        if (is_product_category() && $this->exclusions_manager->is_hidden_from_shop()) {
             $query->set('meta_query', $meta_query);
         }
 
         // Hide from search results
-        if (is_search() && $this->_is_hidden_from_search) {
+        if (is_search() && $this->exclusions_manager->is_hidden_from_search()) {
             $query->set('meta_query', $meta_query);
         }
 
-        // Exclude by category ids on shop
-        if (is_shop() && $this->_hidden_category_ids) {
-            $query->set('post__not_in', $this->get_out_of_stock_by_category());
-        }
-
-        // Exclude by category ids on search results
-        if (is_search() && $this->_hidden_category_ids) {
-            $query->set('post__not_in', $this->get_out_of_stock_by_category());
-        }
-
-        // Hide all if no conditions meet
-        if (!$this->_is_hidden_from_shop && !$this->_is_hidden_from_category && !$this->_is_hidden_from_search) {
-            $query->set('meta_query', $meta_query);
-        }
-
-        // Always show excluded IDs mixed with in-stock products
-        if ($this->_exclude_prod_ids) {
-            $meta_query = array_merge($meta_query, $this->show_exclude_product_ids());
-            $query->set('meta_query', $meta_query);
-            $query->set('post__in', array_merge($this->_exclude_prod_ids, $this->get_instock_product_ids()));
+        // Exclude by category ids
+        if (($category_check = $this->get_out_of_stock_by_category())) {
+            $query->set('post__not_in', $category_check);
         }
     }
 
     /**
-     * Retrieves IDs of in-stock products.
-     *
-     * @return array List of in-stock product IDs.
+     * Retrieves IDs of in-stock products, cached for better performance.
+     * 
+     * @return array List of product IDs that are currently in stock.
      */
     private function get_instock_product_ids() {
-        $query = new WP_Query(array(
-            'post_type' => 'product',
-            'posts_per_page' => -1, // Retrieve all products
-            'fields' => 'ids',      // Only fetch IDs
-            'meta_query' => array(
-                array(
-                    'key' => '_stock_status',
-                    'value' => 'instock',
-                    'compare' => '='
-                )
-            )
-        ));
-
-        return $query->posts;
+        // Return cached in-stock product IDs if available
+        $instock_prod_ids = "";
+        if ($instock_prod_ids === null) {
+            $query = new WP_Query([
+                'post_type' => 'product',
+                'posts_per_page' => -1,
+                'fields' => 'ids',
+                'meta_query' => [
+                    [
+                        'key'     => '_stock_status',
+                        'value'   => 'instock',
+                        'compare' => '='
+                    ]
+                ]
+            ]);
+            $instock_prod_ids = $query->posts;
+        }
+        return $instock_prod_ids;
     }
 
     /**
      * Retrieves the meta query to exclude out-of-stock products.
-     *
-     * @return array Meta query array.
+     * 
+     * @return array The meta query to exclude out-of-stock products.
      */
     private function exclude_out_of_stock() {
         return [
@@ -189,8 +167,8 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Display {
 
     /**
      * Retrieves the meta query to include excluded out-of-stock products.
-     *
-     * @return array Meta query array.
+     * 
+     * @return array The meta query to include excluded out-of-stock products.
      */
     private function show_exclude_product_ids() {
         return [
@@ -205,11 +183,11 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Display {
 
     /**
      * Retrieves out-of-stock product IDs by specified category IDs.
-     *
-     * @return array List of product IDs.
+     * 
+     * @return array List of product IDs that are out-of-stock and belong to excluded categories.
      */
     private function get_out_of_stock_by_category() {
-        if (empty($this->_hidden_category_ids)) {
+        if (empty($this->exclusions_manager->get_hidden_category_ids())) {
             return [];
         }
 
@@ -221,7 +199,7 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Display {
                 [
                     'taxonomy' => 'product_cat',
                     'field'    => 'term_id',
-                    'terms'    => $this->_hidden_category_ids,
+                    'terms'    => $this->exclusions_manager->get_hidden_category_ids(),
                 ],
             ],
             'meta_query' => [
@@ -238,8 +216,8 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Display {
 
     /**
      * Retrieves the out-of-stock display settings from WooCommerce.
-     *
-     * @return array The settings array.
+     * 
+     * @return array The out-of-stock settings option from WooCommerce.
      */
     private function get_out_of_stock_display_setting() {
         return get_option('woocommerce_out_of_stock_settings');
