@@ -17,17 +17,17 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Display {
     /**
      * @var bool Determines if out-of-stock products should be excluded from the shop page.
      */
-    protected $_is_excluded_from_shop;
+    protected $_is_hidden_from_shop;
 
     /**
      * @var bool Determines if out-of-stock products should be excluded from category pages.
      */
-    protected $_is_excluded_from_category;
+    protected $_is_hidden_from_category;
 
     /**
      * @var bool Determines if out-of-stock products should be excluded from search results.
      */
-    protected $_is_excluded_from_search;
+    protected $_is_hidden_from_search;
 
     /**
      * @var array List of category IDs where out-of-stock products should be hidden.
@@ -35,9 +35,23 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Display {
     protected $_hidden_category_ids;
 
     /**
-     * Constructor
-     *
-     * Initializes the class and sets up WordPress hooks.
+     * Class constructor.
+     * 
+     * Initializes the exclusion settings for out-of-stock display management 
+     * and sets up necessary WooCommerce actions and filters.
+     * 
+     * Responsibilities:
+     * - Creates an instance of the `Out_Of_Stock_Display_Manager_For_Woocommerce_Exclusions` class 
+     *   to retrieve exclusion-related data (product IDs, categories, and visibility settings).
+     * - Hooks into WooCommerce to modify product queries and customize out-of-stock labels.
+     * 
+     * @property array $_exclude_prod_ids       Array of product IDs excluded from visibility.
+     * @property bool  $_is_hidden_from_shop    Whether out-of-stock products are hidden from the shop page.
+     * @property bool  $_is_hidden_from_category Whether out-of-stock products are hidden from category pages.
+     * @property bool  $_is_hidden_from_search  Whether out-of-stock products are hidden from search results.
+     * @property array $_hidden_category_ids    Array of category IDs excluded from visibility.
+     * 
+     * @return void
      */
     public function __construct() {
 
@@ -45,12 +59,33 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Display {
         $_exclusions = new Out_Of_Stock_Display_Manager_For_Woocommerce_Exclusions();
 
         $this->_exclude_prod_ids = $_exclusions->get_excluded_product_ids();
-        $this->_is_excluded_from_shop = $_exclusions->is_excluded_from_shop();
-        $this->_is_excluded_from_category = $_exclusions->is_excluded_from_category();
-        $this->_is_excluded_from_search = $_exclusions->is_excluded_from_search();
+        $this->_is_hidden_from_shop = $_exclusions->is_hidden_from_shop();
+        $this->_is_hidden_from_category = $_exclusions->is_hidden_from_category();
+        $this->_is_hidden_from_search = $_exclusions->is_hidden_from_search();
         $this->_hidden_category_ids = $_exclusions->get_hidden_category_ids();
 
         add_action('woocommerce_product_query', [$this, 'filter_products_query']);
+        add_filter('woocommerce_get_availability_text', [$this, 'customize_out_of_stock_label'], 10, 2);
+    }
+
+    /**
+     * Customizes the out-of-stock label based on plugin settings.
+     *
+     * @param string $availability_text The default availability text.
+     * @param WC_Product $product The WooCommerce product object.
+     * @return string The customized availability text.
+     */
+    public function customize_out_of_stock_label($availability_text, $product) {
+        // Check if the product is out of stock
+        if (!$product->is_in_stock()) {
+            // Retrieve the custom label from the WooCommerce settings
+            $options = get_option('woocommerce_out_of_stock_settings');
+            $custom_label = $options['out_of_stock_label'] ?? __('Out of Stock', 'woocommerce');
+            return $custom_label;
+        }
+
+        // Return the default label for in-stock products
+        return $availability_text;
     }
 
     /**
@@ -77,22 +112,24 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Display {
         $meta_query = $query->get('meta_query') ?: [];
         $meta_query = array_merge($meta_query, $this->exclude_out_of_stock());
 
-        // Apply conditions based on page type
-        if (is_shop() && $this->_is_excluded_from_shop) {
+        // Hide from shop page
+        if (is_shop() && $this->_is_hidden_from_shop) {
             $query->set('meta_query', $meta_query);
         }
 
-        // Exclude by category ids
+        // Hide from category page
+        if (is_product_category() && $this->_is_hidden_from_category) {
+            $query->set('meta_query', $meta_query);
+        }
+
+        // Hide from search results
+        if (is_search() && $this->_is_hidden_from_search) {
+            $query->set('meta_query', $meta_query);
+        }
+
+        // Exclude by category ids on shop
         if (is_shop() && $this->_hidden_category_ids) {
             $query->set('post__not_in', $this->get_out_of_stock_by_category());
-        }
-
-        if (is_product_category() && $this->_is_excluded_from_category) {
-            $query->set('meta_query', $meta_query);
-        }
-
-        if (is_search() && $this->_is_excluded_from_search) {
-            $query->set('meta_query', $meta_query);
         }
 
         // Exclude by category ids on search results
@@ -101,7 +138,7 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Display {
         }
 
         // Hide all if no conditions meet
-        if (!$this->_is_excluded_from_shop && !$this->_is_excluded_from_category && !$this->_is_excluded_from_search) {
+        if (!$this->_is_hidden_from_shop && !$this->_is_hidden_from_category && !$this->_is_hidden_from_search) {
             $query->set('meta_query', $meta_query);
         }
 

@@ -11,7 +11,7 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Exclusions {
      * @return array The stored options for out-of-stock exclusions.
      */
     private function get_options() {
-        return get_option('woocommerce_out_of_stock_exclusions', []);
+        return get_option('woocommerce_out_of_stock_settings', []);
     }
 
     /**
@@ -57,40 +57,40 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Exclusions {
     }
 
     /**
-     * Checks if out-of-stock products are excluded from a specific page type.
+     * Checks if out-of-stock products are hidden from a specific page type.
      *
      * @param string $page The page type (e.g., 'shop', 'category', 'search').
-     * @return string 'yes' if excluded, empty string otherwise.
+     * @return string 'yes' if hidden, empty string otherwise.
      */
-    public function is_excluded_from($page) {
-        $excluded_pages = $this->get_option_value('excluded_pages', []);
-        return isset($excluded_pages[$page]) ? $excluded_pages[$page] : '';
+    public function is_hidden_from($page) {
+        $hidden_from_pages = $this->get_option_value('hidden_from_pages', []);
+        return isset($hidden_from_pages[$page]) ? $hidden_from_pages[$page] : '';
     }
 
     /**
-     * Checks if out-of-stock products are excluded from the shop page.
+     * Checks if out-of-stock products are hidden from the shop page.
      *
-     * @return string 'yes' if excluded, empty string otherwise.
+     * @return string 'yes' if hidden, empty string otherwise.
      */
-    public function is_excluded_from_shop() {
-        return $this->is_excluded_from('shop');
+    public function is_hidden_from_shop() {
+        return $this->is_hidden_from('shop');
     }
 
     /**
-     * Checks if out-of-stock products are excluded from category pages.
+     * Checks if out-of-stock products are hidden from category pages.
      *
-     * @return string 'yes' if excluded, empty string otherwise.
+     * @return string 'yes' if hidden, empty string otherwise.
      */
-    public function is_excluded_from_category() {
-        return $this->is_excluded_from('category');
+    public function is_hidden_from_category() {
+        return $this->is_hidden_from('category');
     }
 
     /**
-     * Checks if out-of-stock products are excluded from search results.
+     * Checks if out-of-stock products are hidden from search results.
      *
-     * @return string 'yes' if excluded, empty string otherwise.
+     * @return string 'yes' if hidden, empty string otherwise.
      */
-    public function is_excluded_from_search() {
-        return $this->is_excluded_from('search');
+    public function is_hidden_from_search() {
+        return $this->is_hidden_from('search');
     }
 }
