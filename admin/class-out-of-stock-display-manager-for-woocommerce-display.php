@@ -82,17 +82,32 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Display {
             return;
         }
 
-        // Prepare meta query to exclude out-of-stock products
-        $meta_query = $this->exclude_out_of_stock();
+        // Prepare meta query to exclude out-of-stock products 
+        // If either excluded product ids or excluded product by categories is not empty        
+        if (!empty($this->exclusions_manager->get_excluded_product_ids()) || 
+            !empty($this->exclusions_manager->get_excluded_by_category_ids())) {
+            // Merge the arrays if at least one exclusion condition exists
+            $meta_query = array_merge(
+                $this->exclude_out_of_stock(), 
+                $this->show_exclude_product_ids()
+            );
+        } else {
+            // Default behavior when no exclusions are provided
+            $meta_query = $this->exclude_out_of_stock();
+        }
 
         // Apply filters based on page type (shop, category, search)
         $this->apply_page_filters($query, $meta_query);
 
-        // Always include excluded IDs mixed with in-stock products
+        // Always apply excluded product ids regardless if products by category is empty or not
         if ($this->exclusions_manager->get_excluded_product_ids()) {
             $meta_query[] = $this->show_exclude_product_ids();
             $query->set('meta_query', $meta_query);
-            $query->set('post__in', array_merge($this->exclusions_manager->get_excluded_product_ids(), $this->get_instock_product_ids()));
+            $query->set('post__in', array_merge(
+                $this->exclusions_manager->get_excluded_product_ids(), 
+                $this->get_instock_product_ids(),
+                $this->get_out_of_stock_by_category()
+            ));
         }
     }
 
@@ -103,24 +118,20 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Display {
      * @param array $meta_query The meta query to be applied for product filtering.
      */
     private function apply_page_filters($query, &$meta_query) {
+        
         // Hide from shop page
         if (is_shop() && $this->exclusions_manager->is_hidden_from_shop()) {
             $query->set('meta_query', $meta_query);
         }
 
         // Hide from category page
-        if (is_product_category() && $this->exclusions_manager->is_hidden_from_shop()) {
+        if (is_product_category() && $this->exclusions_manager->is_hidden_from_category()) {
             $query->set('meta_query', $meta_query);
         }
 
         // Hide from search results
         if (is_search() && $this->exclusions_manager->is_hidden_from_search()) {
             $query->set('meta_query', $meta_query);
-        }
-
-        // Exclude by category ids
-        if (($category_check = $this->get_out_of_stock_by_category())) {
-            $query->set('post__not_in', $category_check);
         }
     }
 
@@ -132,7 +143,7 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Display {
     private function get_instock_product_ids() {
         // Return cached in-stock product IDs if available
         $instock_prod_ids = "";
-        if ($instock_prod_ids === null) {
+        if ($instock_prod_ids == null) {
             $query = new WP_Query([
                 'post_type' => 'product',
                 'posts_per_page' => -1,
@@ -187,7 +198,8 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Display {
      * @return array List of product IDs that are out-of-stock and belong to excluded categories.
      */
     private function get_out_of_stock_by_category() {
-        if (empty($this->exclusions_manager->get_hidden_category_ids())) {
+        
+        if (empty($this->exclusions_manager->get_excluded_by_category_ids())) {
             return [];
         }
 
@@ -199,7 +211,7 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Display {
                 [
                     'taxonomy' => 'product_cat',
                     'field'    => 'term_id',
-                    'terms'    => $this->exclusions_manager->get_hidden_category_ids(),
+                    'terms'    => $this->exclusions_manager->get_excluded_by_category_ids(),
                 ],
             ],
             'meta_query' => [
@@ -210,7 +222,6 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Display {
                 ],
             ],
         ]);
-
         return $query->posts;
     }
 

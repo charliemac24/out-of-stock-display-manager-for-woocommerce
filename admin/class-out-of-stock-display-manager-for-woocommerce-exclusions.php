@@ -51,9 +51,9 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Exclusions {
      *
      * @return array List of hidden category IDs.
      */
-    public function get_hidden_category_ids() {
-        $hidden_categories = $this->get_option_value('hidden_categories', '');
-        return $this->parse_comma_separated_value($hidden_categories);
+    public function get_excluded_by_category_ids() {
+        $excluded_by_categories = $this->get_option_value('excluded_by_categories', '');
+        return $this->parse_comma_separated_value($excluded_by_categories);
     }
 
     /**

@@ -103,8 +103,8 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Settings {
 
         $fields = [
             'excluded_products' => __('Exclude Specific Products', 'woocommerce'),
-            'hidden_from_pages' => __('Hide Out of Stock Products on Specific Pages', 'woocommerce'), // changed the label for clarity
-            'hidden_categories' => __('Hide Out of Stock Products from Specific Categories', 'woocommerce')
+            'hidden_from_pages' => __('Hide Out-of-Stock Products on Specific Pages', 'woocommerce'),
+            'excluded_by_categories' => __('Exclude Out-of-Stock Products in Specific Categories from Hiding', 'woocommerce')
         ];
 
         foreach ($fields as $field_key => $field_label) {
@@ -341,11 +341,11 @@ class Out_Of_Stock_Display_Manager_For_Woocommerce_Settings {
      *
      * @return void
      */
-    public function render_hidden_categories_field() {
+    public function render_excluded_by_categories_field() {
         $options = get_option(self::OPTION_NAME);
-        $value = $options['hidden_categories'] ?? '';
+        $value = $options['excluded_by_categories'] ?? '';
         ?>
-        <input type="text" name="<?php echo esc_attr(self::OPTION_NAME); ?>[hidden_categories]" 
+        <input type="text" name="<?php echo esc_attr(self::OPTION_NAME); ?>[excluded_by_categories]" 
                value="<?php echo esc_attr($value); ?>" 
                class="regular-text"
                placeholder="<?php esc_attr_e('Enter category IDs, comma-separated', 'woocommerce'); ?>">
